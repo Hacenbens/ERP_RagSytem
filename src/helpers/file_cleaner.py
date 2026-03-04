@@ -54,7 +54,7 @@ class FileNameCleaner:
         cleaned = FileNameCleaner.clean(filename)
         name, ext = os.path.splitext(cleaned)
         unique_id = uuid.uuid4().hex[:8]
-        return f"{name}_{unique_id}{ext}"
+        return f"{name}_{unique_id}{ext}",unique_id
     
     @staticmethod
     def secure(filename):

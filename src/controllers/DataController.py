@@ -4,7 +4,6 @@ from fastapi import UploadFile
 from models import ResponseSignal
 from helpers.file_cleaner import FileNameCleaner
 import os
-import re
 
 
 class DataController (BaseController):   
@@ -24,12 +23,12 @@ class DataController (BaseController):
         
     def generate_file_name (self,org_file_name:str,prject_id:str):
         
-        clean_filename = FileNameCleaner.with_uuid(org_file_name)
+        clean_filename, file_id= FileNameCleaner.with_uuid(org_file_name)
         dir_file_path = ProjectController().get_project_folder(project_id=prject_id)
         
         file_path = os.path.join(
             dir_file_path,
             clean_filename
         )
-        return file_path         
+        return file_path,file_id         
 
