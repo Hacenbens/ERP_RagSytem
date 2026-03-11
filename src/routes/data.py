@@ -2,6 +2,8 @@ from fastapi import APIRouter, Depends, UploadFile, status, Request
 from fastapi.responses import JSONResponse
 from helpers.config import Settings, get_settings
 from controllers import DataController, ProjectController, ProcessController
+from interfaces.IDBClientContext import IDBClientContext
+from core.AppContext import get_db
 from models import ResponseSignal
 import aiofiles
 import os
@@ -17,7 +19,8 @@ data_route = APIRouter(
 
 @data_route.post("/upload/{project_id}")
 async def upload_file(project_id: str, file: UploadFile, 
-                      app_settings: Settings = Depends(get_settings)):
+                      app_settings: Settings = Depends(get_settings),
+                      db:IDBClientContext = Depends(get_db)):
     
     app_logger.info(f"=== File Upload Started ===")
     app_logger.info(f"Project ID: {project_id}")
@@ -26,7 +29,7 @@ async def upload_file(project_id: str, file: UploadFile,
     
     start_time = time.time()
     
-    data_controller = DataController()
+    data_controller = DataController(db_client=db)
     
     # Validate file
     app_logger.debug(f"Validating file: {file.filename}")
@@ -74,7 +77,7 @@ async def upload_file(project_id: str, file: UploadFile,
     
     return JSONResponse(
         content={
-            "signal": ResponseSignal.FILE_UPLOADED_SUCCESSFULY.value,
+            "signal": ResponseSignal.FILE_UPLOADED_SUCCESSFULLY.value,
             "file_path": file_path,
             "file_id": file_id,
             "size_bytes": file_size
@@ -82,7 +85,10 @@ async def upload_file(project_id: str, file: UploadFile,
     )
 
 @data_route.post("/process/{project_id}")
-async def process_file(project_id: str, process_request: ProcessRequest, request: Request):
+async def process_file(project_id: str, 
+                       process_request: ProcessRequest,
+                       request: Request,
+                       db: IDBClientContext = Depends(get_db)):
     
     app_logger.info(f"=== File Processing Started ===")
     app_logger.info(f"Project ID: {project_id}")
@@ -102,7 +108,7 @@ async def process_file(project_id: str, process_request: ProcessRequest, request
     
     # Initialize controller
     app_logger.debug(f"Initializing ProcessController for project {project_id}")
-    process_controller = ProcessController(project_id=project_id)
+    process_controller = ProcessController(project_id=project_id,db_client=db)
     
     # Get file content
     try:
@@ -148,7 +154,7 @@ async def process_file(project_id: str, process_request: ProcessRequest, request
         app_logger.info(f"Processing file into chunks...")
         app_logger.info(f"Chunk size: {chunk_size}, Overlap: {overlap_size}")
         
-        file_chunks = process_controller.process_file(
+        file_chunks =await process_controller.process_file(
             file_id=file_id,
             file_content=file_content,
             chunk_size=chunk_size,
@@ -168,13 +174,13 @@ async def process_file(project_id: str, process_request: ProcessRequest, request
                 }
             )
         
-        chunks_count = len(file_chunks)
+        chunks_count = file_chunks["chunks_count"]
         app_logger.info(f"Generated {chunks_count} chunks")
         
         # Log sample of first chunk for debugging
         if chunks_count > 0:
-            first_chunk = file_chunks[0]
-            app_logger.debug(f"First chunk preview: {str(first_chunk.page_content)[:100]}...")
+            first_chunk = file_chunks["chunks"][0]
+            app_logger.debug(f"First chunk preview: {str(first_chunk)[:100]}...")
             if hasattr(first_chunk, 'metadata'):
                 app_logger.debug(f"First chunk metadata: {first_chunk.metadata}")
         
@@ -190,9 +196,9 @@ async def process_file(project_id: str, process_request: ProcessRequest, request
                 "processing_time_seconds": round(processing_time, 2),
                 "chunks": [
                     {
-                        "page_content": chunk.page_content,
-                        "metadata": chunk.metadata
-                    } for chunk in file_chunks
+                        "page_content": chunk.model_dump(mode='json'),
+                        "metadata": chunk.metadata.dict()
+                    } for chunk in file_chunks["chunks"]
                 ]
             }
         )

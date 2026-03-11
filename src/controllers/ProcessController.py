@@ -4,13 +4,14 @@ from models import FileExtentions
 from langchain_community.document_loaders import PyMuPDFLoader
 from langchain_community.document_loaders import TextLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from interfaces.IDBClientContext import IDBClientContext
 import os
 from helpers.logger import app_logger  # Import the logger
 
 class ProcessController(BaseController):
     
-    def __init__(self, project_id):
-        super().__init__()
+    def __init__(self, project_id,db_client:IDBClientContext):
+        super().__init__(db_client=db_client)
         self.project_id = project_id
         self.project_path = ProjectController().get_project_folder(project_id=project_id)
         app_logger.info(f"ProcessController initialized for project: {project_id}")
@@ -65,7 +66,7 @@ class ProcessController(BaseController):
             app_logger.error(f"Error loading content from {file_id}: {str(e)}", exc_info=True)
             raise
     
-    def process_file(self, file_id: str, file_content: str, chunk_size: int , overlap_size: int ):
+    async def process_file(self, file_id: str, file_content: str, chunk_size: int , overlap_size: int ):
         app_logger.info(f"Processing file: {file_id} with chunk_size={chunk_size}, overlap={overlap_size}")
         
         try:
@@ -89,8 +90,6 @@ class ProcessController(BaseController):
             
             app_logger.debug(f"Creating chunks from content")
             
-            # Fix: You were calling create_document incorrectly
-            # Using the splitter correctly
             chunks = text_splitter.create_documents(
                 texts=file_content_texts,    
                 metadatas=file_metadatas
@@ -99,7 +98,17 @@ class ProcessController(BaseController):
             app_logger.info(f"Successfully created {len(chunks)} chunks from {file_id}")
             app_logger.debug(f"First chunk preview: {chunks[0].page_content[:50]}..." if chunks else "No chunks created")
             
-            return chunks
+            stored_chunks = await self.db_client.store_chunks(
+            project_id=self.project_id,
+            file_id=file_id,
+            langchain_chunks=chunks  # Vos chunks langchain
+            )
+        
+            return {
+                "file_id": file_id,
+                "chunks_count": len(stored_chunks),
+                "chunks": stored_chunks[:3]
+            }
             
         except Exception as e:
             app_logger.error(f"Error processing file {file_id}: {str(e)}", exc_info=True)

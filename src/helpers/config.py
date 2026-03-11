@@ -9,6 +9,12 @@ class Settings (BaseSettings):
     FILE_MAX_SIZE : int
     FILE_CHUNK_SIZE : int
     
+    MONGODB_URL : str
+    MONGODB_DATABASE : str
+    
+    MONGO_APP_USER : str
+    MONGO_APP_PASSWORD :str
+    
     model_config = SettingsConfigDict(
             env_file=".env",  # Looks in current working directory
             env_file_encoding="utf-8",
